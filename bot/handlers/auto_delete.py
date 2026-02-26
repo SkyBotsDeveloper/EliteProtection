@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.types import Message
 
-from bot.services import get_auto_delete_service, is_group_protected
+from bot.services import get_active_protected_group, get_auto_delete_service, is_group_protected
 
 router = Router(name="auto_delete")
 GROUP_CHAT_TYPES = {ChatType.GROUP, ChatType.SUPERGROUP}
@@ -24,6 +24,11 @@ def _is_forwarded_from_bot(message: Message) -> bool:
     sender_chat = getattr(forward_origin, "sender_chat", None)
     sender_chat_type = str(getattr(sender_chat, "type", "")).lower()
     if sender_chat is not None and sender_chat_type in {"bot", "channel"}:
+        return True
+
+    forward_from_chat = getattr(message, "forward_from_chat", None)
+    forward_from_chat_type = str(getattr(forward_from_chat, "type", "")).lower()
+    if forward_from_chat is not None and forward_from_chat_type in {"bot", "channel"}:
         return True
 
     return False
@@ -98,10 +103,26 @@ def _pick_schedule_kind(message: Message) -> str | None:
 async def _schedule_if_eligible(message: Message) -> None:
     schedule_kind = _pick_schedule_kind(message)
     if schedule_kind is None:
+        logger.debug(
+            "Auto-delete skipped non-target message",
+            extra={
+                "chat_id": message.chat.id,
+                "message_id": message.message_id,
+                "from_is_bot": bool(getattr(message.from_user, "is_bot", False)),
+                "has_sticker": message.sticker is not None,
+                "has_via_bot": getattr(message, "via_bot", None) is not None,
+                "has_reply_to_message": getattr(message, "reply_to_message", None) is not None,
+            },
+        )
         return
 
     try:
-        if not await is_group_protected(group_id=message.chat.id):
+        protected = await is_group_protected(group_id=message.chat.id)
+        if not protected:
+            # Cache miss window avoid karne ke liye DB fallback check.
+            protected = (await get_active_protected_group(group_id=message.chat.id)) is not None
+
+        if not protected:
             return
 
         await get_auto_delete_service().schedule_message_delete(
