@@ -258,6 +258,8 @@ Ye observer Telegram user account session se events read karta hai aur existing 
 - Auto-delete nahi chal raha:
   - Group subscribed hai ya nahi `/status` se check karo.
   - Bot admin aur delete permission verify karo.
+  - `/check` me observer status dekh lo. Agar `Disabled` ya `Incomplete` hai to dusre bots ke messages reliably delete nahi honge.
+  - Logs me `Userbot observer disabled` ya `missing required observer credentials` aa raha ho to observer env vars fill karo.
   - Logs me permission/floodwait errors check karo.
 - Webhook issue:
   - `WEBHOOK_MODE=true` + valid public `WEBHOOK_BASE_URL` confirm karo.

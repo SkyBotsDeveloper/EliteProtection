@@ -175,6 +175,30 @@ class Settings(BaseSettings):
             return None
         return raw_session
 
+    @property
+    def observer_credentials_present(self) -> bool:
+        return (
+            self.observer_api_id is not None
+            and self.observer_api_hash_value is not None
+            and self.observer_session_string_value is not None
+        )
+
+    @property
+    def observer_effective_enabled(self) -> bool:
+        # Start observer if explicitly enabled OR if all credentials are already provided.
+        return self.observer_enabled or self.observer_credentials_present
+
+    @property
+    def observer_missing_fields(self) -> tuple[str, ...]:
+        missing: list[str] = []
+        if self.observer_api_id is None:
+            missing.append("OBSERVER_API_ID")
+        if self.observer_api_hash_value is None:
+            missing.append("OBSERVER_API_HASH")
+        if self.observer_session_string_value is None:
+            missing.append("OBSERVER_SESSION_STRING")
+        return tuple(missing)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

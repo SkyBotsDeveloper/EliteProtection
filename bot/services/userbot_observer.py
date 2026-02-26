@@ -281,21 +281,30 @@ async def _on_new_message(event: Any) -> None:
 async def start_userbot_observer(*, settings: Settings, bot: Bot) -> None:
     global _observer_client, _observer_bot, _sync_task, _observer_user_id, _bot_user_id
 
-    if not settings.observer_enabled:
-        logger.info("Userbot observer disabled")
+    if not settings.observer_effective_enabled:
+        logger.warning(
+            "Userbot observer disabled; other-bot messages are not visible without observer credentials",
+            extra={"observer_enabled": settings.observer_enabled},
+        )
         return
 
     if TelegramClient is None or events is None or StringSession is None:
         logger.warning("Userbot observer unavailable: telethon import failed")
         return
 
+    missing_fields = settings.observer_missing_fields
+    if missing_fields:
+        logger.warning(
+            "Userbot observer not started: missing required observer credentials",
+            extra={"missing_fields": ",".join(missing_fields)},
+        )
+        return
+
     api_id = settings.observer_api_id
     api_hash = settings.observer_api_hash_value
     session_string = settings.observer_session_string_value
-    if api_id is None or not api_hash or not session_string:
-        logger.warning(
-            "Userbot observer not started: missing OBSERVER_API_ID/OBSERVER_API_HASH/OBSERVER_SESSION_STRING",
-        )
+    if api_id is None or api_hash is None or session_string is None:
+        # Defensive guard; missing fields should already be handled above.
         return
 
     async with _observer_lock:

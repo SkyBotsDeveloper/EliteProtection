@@ -7,6 +7,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import ChatMemberUpdated, Message
 
+from bot.config import get_settings
 from bot.services import get_active_protected_group, schedule_sent_message_if_needed
 from bot.utils import GENERIC_HANDLER_ERROR_TEXT
 
@@ -55,6 +56,17 @@ def _read_messages_status(can_read_all_group_messages: bool | None) -> str:
     return "Limited access ⚠️ (privacy mode on ho sakta hai)"
 
 
+def _observer_status_text() -> str:
+    settings = get_settings()
+    missing_fields = settings.observer_missing_fields
+    if missing_fields:
+        joined_missing = ", ".join(missing_fields)
+        return f"Incomplete ⚠️ (missing: {joined_missing})"
+    if settings.observer_effective_enabled:
+        return "Enabled ✅"
+    return "Disabled ⚠️ (other bot messages visible nahi honge)"
+
+
 async def _safe_reply(message: Message, text: str) -> None:
     try:
         sent_message = await message.reply(text)
@@ -96,6 +108,7 @@ async def check_group_setup(message: Message) -> None:
         can_invite_users=getattr(bot_member, "can_invite_users", None),
     )
     read_messages_text = _read_messages_status(getattr(me, "can_read_all_group_messages", None))
+    observer_status = _observer_status_text()
 
     await _safe_reply(
         message,
@@ -104,7 +117,8 @@ async def check_group_setup(message: Message) -> None:
             f"1) Subscription/Protection: {subscription_text}\n"
             f"2) Delete messages permission: {delete_perm_text}\n"
             f"3) Add members / Invite users permission: {invite_perm_text}\n"
-            f"4) Group messages read access (padhne ki permission): {read_messages_text}\n\n"
+            f"4) Group messages read access (padhne ki permission): {read_messages_text}\n"
+            f"5) Observer status (other-bot capture): {observer_status}\n\n"
             "Note: Observer auto-invite ke liye Invite users permission dena zaroori hai.\n"
             "Agar privacy mode on ho to bot sirf limited messages read kar pata hai."
         ),
