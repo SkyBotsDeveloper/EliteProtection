@@ -84,6 +84,30 @@ class Settings(BaseSettings):
         le=200000,
     )
 
+    observer_enabled: bool = Field(
+        False,
+        alias="OBSERVER_ENABLED",
+    )
+    observer_api_id: int | None = Field(
+        None,
+        alias="OBSERVER_API_ID",
+        ge=1,
+    )
+    observer_api_hash: SecretStr | None = Field(
+        None,
+        alias="OBSERVER_API_HASH",
+    )
+    observer_session_string: SecretStr | None = Field(
+        None,
+        alias="OBSERVER_SESSION_STRING",
+    )
+    observer_sync_interval_seconds: int = Field(
+        30,
+        alias="OBSERVER_SYNC_INTERVAL_SECONDS",
+        ge=10,
+        le=3600,
+    )
+
     bot_run_mode: Literal["polling", "webhook"] = Field("polling", alias="BOT_RUN_MODE")
     webhook_mode: bool = Field(False, alias="WEBHOOK_MODE")
     webhook_base_url: str = Field("", alias="WEBHOOK_BASE_URL")
@@ -130,6 +154,26 @@ class Settings(BaseSettings):
         if not raw_token:
             return None
         return raw_token
+
+    @property
+    def observer_api_hash_value(self) -> str | None:
+        if self.observer_api_hash is None:
+            return None
+
+        raw_hash = self.observer_api_hash.get_secret_value().strip()
+        if not raw_hash:
+            return None
+        return raw_hash
+
+    @property
+    def observer_session_string_value(self) -> str | None:
+        if self.observer_session_string is None:
+            return None
+
+        raw_session = self.observer_session_string.get_secret_value().strip()
+        if not raw_session:
+            return None
+        return raw_session
 
 
 @lru_cache(maxsize=1)

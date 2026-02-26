@@ -158,6 +158,29 @@ async def count_active_protected_groups() -> int:
     return await count_group_cache()
 
 
+async def list_active_group_ids(*, limit: int = 5000) -> list[int]:
+    await ensure_protected_group_indexes()
+
+    capped_limit = max(1, min(limit, 100_000))
+    collection = get_database()[PROTECTED_GROUPS_COLLECTION]
+    cursor = (
+        collection.find(
+            {"subscription_status": SubscriptionStatus.ACTIVE.value},
+            {"_id": 0, "group_id": 1},
+        )
+        .sort("activated_at", ASCENDING)
+        .limit(capped_limit)
+    )
+
+    group_ids: list[int] = []
+    async for document in cursor:
+        group_id = document.get("group_id")
+        if isinstance(group_id, int):
+            group_ids.append(group_id)
+
+    return group_ids
+
+
 async def list_active_groups_by_owner(*, owner_user_id: int, limit: int = 10) -> list[ProtectedGroup]:
     await ensure_protected_group_indexes()
 

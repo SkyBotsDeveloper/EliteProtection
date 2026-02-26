@@ -95,6 +95,26 @@
       "description": "Maximum pending deletes restored at startup",
       "value": "20000"
     },
+    "OBSERVER_ENABLED": {
+      "description": "Optional MTProto observer for broader bot-message visibility",
+      "value": "false"
+    },
+    "OBSERVER_API_ID": {
+      "description": "Telegram API ID for observer account (required if OBSERVER_ENABLED=true)",
+      "required": false
+    },
+    "OBSERVER_API_HASH": {
+      "description": "Telegram API hash for observer account (required if OBSERVER_ENABLED=true)",
+      "required": false
+    },
+    "OBSERVER_SESSION_STRING": {
+      "description": "Telethon StringSession for observer account (required if OBSERVER_ENABLED=true)",
+      "required": false
+    },
+    "OBSERVER_SYNC_INTERVAL_SECONDS": {
+      "description": "Observer auto-join sync interval in seconds",
+      "value": "30"
+    },
     "BOT_RUN_MODE": {
       "description": "Runtime mode: polling or webhook",
       "value": "webhook"

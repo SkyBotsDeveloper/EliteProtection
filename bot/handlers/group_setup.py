@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import Command
 from aiogram.types import ChatMemberUpdated, Message
 
-from bot.services import get_active_protected_group
+from bot.services import get_active_protected_group, schedule_sent_message_if_needed
 from bot.utils import GENERIC_HANDLER_ERROR_TEXT
 
 router = Router(name="group_setup")
@@ -39,6 +39,16 @@ def _delete_permission_status(chat_member_status: str, can_delete_messages: bool
     return "Nahi ❌"
 
 
+def _invite_permission_status(chat_member_status: str, can_invite_users: bool | None) -> str:
+    if chat_member_status in {"creator", "administrator"}:
+        if chat_member_status == "creator":
+            return "Haan ✅"
+        if can_invite_users:
+            return "Haan ✅"
+        return "Nahi ❌"
+    return "Nahi ❌"
+
+
 def _read_messages_status(can_read_all_group_messages: bool | None) -> str:
     if can_read_all_group_messages:
         return "Full access ✅ (privacy mode off)"
@@ -47,7 +57,8 @@ def _read_messages_status(can_read_all_group_messages: bool | None) -> str:
 
 async def _safe_reply(message: Message, text: str) -> None:
     try:
-        await message.reply(text)
+        sent_message = await message.reply(text)
+        await schedule_sent_message_if_needed(sent_message)
     except TelegramAPIError:
         logger.exception(
             "Failed to send group setup reply",
@@ -80,6 +91,10 @@ async def check_group_setup(message: Message) -> None:
         chat_member_status=_status_value(bot_member.status),
         can_delete_messages=getattr(bot_member, "can_delete_messages", None),
     )
+    invite_perm_text = _invite_permission_status(
+        chat_member_status=_status_value(bot_member.status),
+        can_invite_users=getattr(bot_member, "can_invite_users", None),
+    )
     read_messages_text = _read_messages_status(getattr(me, "can_read_all_group_messages", None))
 
     await _safe_reply(
@@ -88,8 +103,10 @@ async def check_group_setup(message: Message) -> None:
             "Setup ka status summary:\n"
             f"1) Subscription/Protection: {subscription_text}\n"
             f"2) Delete messages permission: {delete_perm_text}\n"
-            f"3) Group messages read access (padhne ki permission): {read_messages_text}\n\n"
-            "Note: Agar privacy mode on ho to bot sirf limited messages read kar pata hai."
+            f"3) Add members / Invite users permission: {invite_perm_text}\n"
+            f"4) Group messages read access (padhne ki permission): {read_messages_text}\n\n"
+            "Note: Observer auto-invite ke liye Invite users permission dena zaroori hai.\n"
+            "Agar privacy mode on ho to bot sirf limited messages read kar pata hai."
         ),
     )
 
@@ -140,13 +157,14 @@ async def on_bot_added_to_group(event: ChatMemberUpdated) -> None:
         return
 
     try:
-        await event.bot.send_message(
+        sent_message = await event.bot.send_message(
             chat_id=event.chat.id,
             text=(
                 "Namaste! Ye group subscribed nahi hai, isliye protection abhi active nahi hoga.\n"
                 "Subscription ke liye owner ko bot DM me /start karke process complete karna hoga."
             ),
         )
+        await schedule_sent_message_if_needed(sent_message)
     except TelegramAPIError:
         logger.exception(
             "Failed to send non-subscribed group notice",

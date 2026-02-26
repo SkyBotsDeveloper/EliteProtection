@@ -24,6 +24,7 @@ from .protected_groups import (
     ensure_protected_group_indexes,
     get_active_protected_group,
     is_group_protected,
+    list_active_group_ids,
     list_active_groups_by_owner,
     parse_group_chat_id,
     revoke_protected_group,
@@ -31,6 +32,8 @@ from .protected_groups import (
     stop_protected_group_cache,
 )
 from .user_states import clear_user_state, consume_user_state, get_user_state, set_user_state
+from .auto_delete_outbound import schedule_sent_message_if_needed
+from .userbot_observer import start_userbot_observer, stop_userbot_observer
 
 __all__ = [
     "is_done_click_allowed",
@@ -55,6 +58,7 @@ __all__ = [
     "get_active_protected_group",
     "is_group_protected",
     "count_active_protected_groups",
+    "list_active_group_ids",
     "list_active_groups_by_owner",
     "configure_protected_group_cache",
     "start_protected_group_cache",
@@ -64,4 +68,7 @@ __all__ = [
     "get_auto_delete_service",
     "get_owner_stats",
     "OwnerStats",
+    "schedule_sent_message_if_needed",
+    "start_userbot_observer",
+    "stop_userbot_observer",
 ]

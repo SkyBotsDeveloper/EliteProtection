@@ -16,6 +16,8 @@ from bot.services import (
     get_auto_delete_service,
     start_auto_delete_service,
     start_protected_group_cache,
+    start_userbot_observer,
+    stop_userbot_observer,
     stop_protected_group_cache,
 )
 from bot.utils import configure_logging
@@ -65,9 +67,15 @@ async def startup_infra(settings: Settings, *, bot: Bot) -> None:
     await ensure_protected_group_indexes()
     await start_protected_group_cache()
     await start_auto_delete_service(bot=bot)
+    await start_userbot_observer(settings=settings, bot=bot)
 
 
 async def shutdown_infra(*, bot: Bot) -> None:
+    try:
+        await stop_userbot_observer()
+    except Exception:
+        logger.exception("Failed to stop userbot observer")
+
     try:
         await get_auto_delete_service().shutdown()
     except Exception:

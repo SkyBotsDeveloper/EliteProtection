@@ -31,6 +31,8 @@ Protected groups me bot-generated content ke liye optimized engine use hota hai:
   - failed count
   - average delay drift
 
+Important: Telegram Bot API se dusre bots ke messages har case me reliably nahi milte. Isliye `bot_content_scheduled` low/zero reh sakta hai jabki stickers delete ho rahe hon.
+
 ## Project Structure
 ```text
 bot/
@@ -210,12 +212,23 @@ https://www.heroku.com/deploy?template=https://github.com/SkyBotsDeveloper/Elite
 Group me bot ke liye:
 1. Admin role dena zaroori hai
 2. `Delete messages` permission deni zaroori hai
-3. Group subscribed/protected hona zaroori hai
-4. Protected group me sab stickers bhi 35 second baad auto-delete honge
+3. Observer mode use kar rahe ho to `Invite users` permission deni zaroori hai
+4. Group subscribed/protected hona zaroori hai
+5. Protected group me sab stickers bhi 35 second baad auto-delete honge
 
 ## Privacy Mode Note
 - Privacy mode on ho to bot ko limited visibility mil sakti hai.
 - Better detection ke liye privacy mode off recommended hai.
+
+## Full Bot-Message Coverage (Optional Observer Mode)
+Agar aapko dusre bots ke command replies/media ko bhi aggressively delete karna hai, to optional MTProto observer enable karo:
+- `OBSERVER_ENABLED=true`
+- `OBSERVER_API_ID`
+- `OBSERVER_API_HASH`
+- `OBSERVER_SESSION_STRING`
+- `OBSERVER_SYNC_INTERVAL_SECONDS` (default `30`)
+
+Ye observer Telegram user account session se events read karta hai aur existing auto-delete engine me same `35s` scheduling bhejta hai. Bot ke paas `Invite users` permission ho to observer account auto-invite/auto-join sync bhi chalta hai.
 
 ## Important Env Vars (Auto-Delete)
 - `BOT_MESSAGE_DELETE_DELAY_SECONDS` (default `35`)
@@ -229,6 +242,11 @@ Group me bot ke liye:
 - `AUTO_DELETE_PERSISTENCE_ENABLED` (`false` by default)
 - `AUTO_DELETE_PERSISTENCE_TTL_HOURS`
 - `AUTO_DELETE_RESTORE_LIMIT`
+- `OBSERVER_ENABLED` (`false` by default)
+- `OBSERVER_API_ID`
+- `OBSERVER_API_HASH`
+- `OBSERVER_SESSION_STRING`
+- `OBSERVER_SYNC_INTERVAL_SECONDS` (default `30`)
 
 ## Troubleshooting
 - Bot start nahi ho raha:

@@ -397,7 +397,7 @@ async def bind_group_id_message(message: Message) -> None:
             "1) @EliteXprotectorBot ko group me add karo\n"
             "2) Bot ko admin banao\n"
             "3) Delete messages permission do\n"
-            "4) BotFather me privacy mode off karna recommended hai\n\n"
+            "4) Add members / Invite users permission bhi do (observer auto-invite ke liye)\n\n"
             "Setup complete ho jaye to Check Setup dabao."
         ),
         reply_markup=check_setup_keyboard(),
