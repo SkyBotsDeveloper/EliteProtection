@@ -110,11 +110,7 @@ def _pick_schedule_kind(message: Message) -> str | None:
     if message.sticker is not None:
         return "sticker"
 
-    if (
-        is_bot_generated_message(message)
-        or _is_reply_to_bot_content(message)
-        or _is_reply_to_sticker(message)
-    ):
+    if is_bot_generated_message(message):
         return "bot_content"
 
     return None

@@ -51,6 +51,8 @@ _bot_user_id: int | None = None
 _joined_groups: set[int] = set()
 _retry_after_by_group: dict[int, float] = {}
 _known_bot_user_ids: set[int] = set()
+_sender_bot_cache: dict[int, tuple[bool, float]] = {}
+_sender_bot_cache_ttl_seconds = 600.0
 
 
 def _status_value(raw_status: object) -> str:
@@ -78,6 +80,22 @@ async def _is_protected_group(chat_id: int) -> bool:
     if protected:
         return True
     return (await get_active_protected_group(group_id=chat_id)) is not None
+
+
+def _cache_sender_is_bot(*, user_id: int, is_bot: bool) -> None:
+    _sender_bot_cache[user_id] = (is_bot, monotonic())
+
+
+def _lookup_cached_sender_is_bot(*, user_id: int) -> bool | None:
+    cached = _sender_bot_cache.get(user_id)
+    if cached is None:
+        return None
+
+    is_bot, cached_at = cached
+    if (monotonic() - cached_at) > _sender_bot_cache_ttl_seconds:
+        _sender_bot_cache.pop(user_id, None)
+        return None
+    return is_bot
 
 
 def _extract_sender_user_id(message: Any) -> int | None:
@@ -157,13 +175,23 @@ async def _sender_is_bot(event: Any, *, source_message: Any | None = None) -> bo
     if message is None:
         return False
 
+    chat_id = _to_bot_api_chat_id(getattr(message, "peer_id", None))
     sender_id = _extract_sender_user_id(message)
-    if sender_id is not None and sender_id in _known_bot_user_ids:
-        return True
+    if sender_id is not None:
+        if sender_id in _known_bot_user_ids:
+            return True
+
+        cached = _lookup_cached_sender_is_bot(user_id=sender_id)
+        if cached is not None:
+            if cached:
+                _known_bot_user_ids.add(sender_id)
+            return cached
 
     sender = getattr(message, "sender", None)
     if _sender_object_is_bot(sender):
         _remember_bot_sender(message, sender)
+        if sender_id is not None:
+            _cache_sender_is_bot(user_id=sender_id, is_bot=True)
         return True
 
     try:
@@ -176,9 +204,26 @@ async def _sender_is_bot(event: Any, *, source_message: Any | None = None) -> bo
         sender = None
 
     if not _sender_object_is_bot(sender):
+        if sender_id is not None and chat_id is not None and chat_id < 0 and _observer_bot is not None:
+            try:
+                member = await _observer_bot.get_chat_member(chat_id=chat_id, user_id=sender_id)
+                resolved_is_bot = bool(getattr(getattr(member, "user", None), "is_bot", False))
+                _cache_sender_is_bot(user_id=sender_id, is_bot=resolved_is_bot)
+                if resolved_is_bot:
+                    _known_bot_user_ids.add(sender_id)
+                return resolved_is_bot
+            except TelegramAPIError:
+                pass
+            except Exception:
+                logger.exception(
+                    "Observer sender bot resolution failed",
+                    extra={"chat_id": chat_id, "sender_user_id": sender_id},
+                )
         return False
 
     _remember_bot_sender(message, sender)
+    if sender_id is not None:
+        _cache_sender_is_bot(user_id=sender_id, is_bot=True)
     return True
 
 
@@ -211,8 +256,6 @@ async def _pick_schedule_kind(event: Any, *, message: Any) -> str | None:
     if _forward_origin_is_bot_or_channel(message):
         return "bot_content"
     if await _sender_is_bot(event, source_message=message):
-        return "bot_content"
-    if await _is_reply_to_bot_or_sticker(event, message):
         return "bot_content"
 
     return None
@@ -500,6 +543,7 @@ async def stop_userbot_observer() -> None:
         _joined_groups.clear()
         _retry_after_by_group.clear()
         _known_bot_user_ids.clear()
+        _sender_bot_cache.clear()
 
     if sync_task is not None:
         sync_task.cancel()
