@@ -1,0 +1,21 @@
+[Unit]
+Description=EliteXprotectorBot Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=elitexprotector
+Group=elitexprotector
+WorkingDirectory=/opt/elitexprotector
+EnvironmentFile=/opt/elitexprotector/.env
+ExecStart=/opt/elitexprotector/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

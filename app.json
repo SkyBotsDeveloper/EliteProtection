@@ -1,0 +1,126 @@
+{
+  "name": "EliteXprotectorBot",
+  "description": "Telegram protection bot with paid onboarding, admin review, and high-scale auto-delete engine.",
+  "repository": "https://github.com/SkyBotsDeveloper/EliteProtection",
+  "keywords": [
+    "telegram",
+    "aiogram",
+    "mongodb",
+    "autodelete",
+    "moderation"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram bot token from @BotFather",
+      "required": true
+    },
+    "MONGO_URI": {
+      "description": "MongoDB connection URI",
+      "required": true
+    },
+    "MONGO_DB_NAME": {
+      "description": "MongoDB database name",
+      "value": "elitex_protector"
+    },
+    "LOG_LEVEL": {
+      "description": "Logging level",
+      "value": "INFO"
+    },
+    "OWNER_USER_ID": {
+      "description": "Owner Telegram user id (numeric)",
+      "required": true
+    },
+    "OWNER_USERNAME": {
+      "description": "Owner Telegram username without @",
+      "value": "EliteSid"
+    },
+    "ADMIN_REVIEW_CHAT_ID": {
+      "description": "Admin review channel/group chat id (numeric, usually starts with -100)",
+      "required": true
+    },
+    "PAYMENT_QR_IMAGE_URL": {
+      "description": "Public URL of payment QR image",
+      "value": "https://files.catbox.moe/0svb7x.jpg"
+    },
+    "BOT_MESSAGE_DELETE_DELAY_SECONDS": {
+      "description": "Delete delay for bot messages and all stickers",
+      "value": "35"
+    },
+    "PROTECTED_GROUP_CACHE_REFRESH_SECONDS": {
+      "description": "Protected-group cache refresh interval (seconds)",
+      "value": "20"
+    },
+    "AUTO_DELETE_TICK_INTERVAL_MS": {
+      "description": "Scheduler tick interval in milliseconds",
+      "value": "200"
+    },
+    "AUTO_DELETE_CHUNK_SIZE": {
+      "description": "Delete batch size (max 100)",
+      "value": "100"
+    },
+    "AUTO_DELETE_RETRY_ATTEMPTS": {
+      "description": "Retry attempts for temporary Telegram API errors",
+      "value": "5"
+    },
+    "AUTO_DELETE_RETRY_BASE_SECONDS": {
+      "description": "Base retry delay in seconds",
+      "value": "1.5"
+    },
+    "AUTO_DELETE_RETRY_MAX_SECONDS": {
+      "description": "Maximum retry delay in seconds",
+      "value": "35"
+    },
+    "AUTO_DELETE_WORKER_CONCURRENCY": {
+      "description": "Parallel delete worker concurrency",
+      "value": "12"
+    },
+    "AUTO_DELETE_METRICS_LOG_INTERVAL_SECONDS": {
+      "description": "Metrics log interval in seconds",
+      "value": "60"
+    },
+    "AUTO_DELETE_PERSISTENCE_ENABLED": {
+      "description": "Persist pending deletes in Mongo for crash recovery",
+      "value": "false"
+    },
+    "AUTO_DELETE_PERSISTENCE_TTL_HOURS": {
+      "description": "TTL for persisted pending deletes in hours",
+      "value": "24"
+    },
+    "AUTO_DELETE_RESTORE_LIMIT": {
+      "description": "Maximum pending deletes restored at startup",
+      "value": "20000"
+    },
+    "BOT_RUN_MODE": {
+      "description": "Runtime mode: polling or webhook",
+      "value": "webhook"
+    },
+    "WEBHOOK_MODE": {
+      "description": "Force webhook mode",
+      "value": "true"
+    },
+    "WEBHOOK_BASE_URL": {
+      "description": "Public app URL, for example https://your-app-name.herokuapp.com",
+      "required": true
+    },
+    "WEBHOOK_PATH": {
+      "description": "Telegram webhook path",
+      "value": "/webhook/telegram"
+    },
+    "WEBHOOK_SECRET_TOKEN": {
+      "description": "Webhook secret token for Telegram header validation",
+      "generator": "secret"
+    },
+    "WEB_SERVER_HOST": {
+      "description": "HTTP server bind host",
+      "value": "0.0.0.0"
+    }
+  },
+  "scripts": {
+    "postdeploy": "python -m compileall main.py bot"
+  }
+}
