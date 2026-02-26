@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 
 from aiogram import F, Router
 from aiogram.enums import ChatType
@@ -9,6 +9,7 @@ from bot.services import get_active_protected_group, get_auto_delete_service, is
 router = Router(name="auto_delete")
 GROUP_CHAT_TYPES = {ChatType.GROUP, ChatType.SUPERGROUP}
 logger = logging.getLogger(__name__)
+DELETE_DELAY_SECONDS = 45
 
 
 def _is_forwarded_from_bot(message: Message) -> bool:
@@ -50,45 +51,6 @@ def _is_sender_context_bot(message: Message) -> bool:
     return False
 
 
-def _is_reply_to_bot_content(message: Message) -> bool:
-    reply_to_message = getattr(message, "reply_to_message", None)
-    if reply_to_message is not None:
-        if is_bot_generated_message(reply_to_message):
-            return True
-        if getattr(reply_to_message, "is_automatic_forward", False):
-            return True
-
-    external_reply = getattr(message, "external_reply", None)
-    reply_origin = getattr(external_reply, "origin", None)
-
-    sender_user = getattr(reply_origin, "sender_user", None)
-    if sender_user is not None and getattr(sender_user, "is_bot", False):
-        return True
-
-    sender_chat = getattr(reply_origin, "sender_chat", None)
-    sender_chat_type = str(getattr(sender_chat, "type", "")).lower()
-    if sender_chat is not None and sender_chat_type in {"bot", "channel"}:
-        return True
-
-    return False
-
-
-def _is_reply_to_sticker(message: Message) -> bool:
-    reply_to_message = getattr(message, "reply_to_message", None)
-    if reply_to_message is not None and getattr(reply_to_message, "sticker", None) is not None:
-        return True
-
-    external_reply = getattr(message, "external_reply", None)
-    if external_reply is None:
-        return False
-
-    if getattr(external_reply, "sticker", None) is not None:
-        return True
-
-    media_type = str(getattr(external_reply, "media_type", "")).lower()
-    return media_type == "sticker"
-
-
 def is_bot_generated_message(message: Message) -> bool:
     from_user = message.from_user
     if from_user is not None and from_user.is_bot:
@@ -107,9 +69,12 @@ def is_bot_generated_message(message: Message) -> bool:
 
 
 def _pick_schedule_kind(message: Message) -> str | None:
+    # Rule 1: sticker from anyone should be auto-deleted.
     if message.sticker is not None:
         return "sticker"
 
+    # Rule 2: any bot-origin content should be auto-deleted.
+    # This includes replies and all media/caption variants.
     if is_bot_generated_message(message):
         return "bot_content"
 
@@ -139,13 +104,28 @@ async def _schedule_if_eligible(message: Message) -> None:
             protected = (await get_active_protected_group(group_id=message.chat.id)) is not None
 
         if not protected:
+            logger.debug(
+                "Auto-delete skipped: group not protected",
+                extra={"chat_id": message.chat.id, "message_id": message.message_id},
+            )
             return
 
-        await get_auto_delete_service().schedule_message_delete(
+        scheduled = await get_auto_delete_service().schedule_message_delete(
             bot=message.bot,
             chat_id=message.chat.id,
             message_id=message.message_id,
+            delay_seconds=DELETE_DELAY_SECONDS,
             schedule_kind=schedule_kind,
+        )
+        logger.debug(
+            "Auto-delete scheduling decided",
+            extra={
+                "chat_id": message.chat.id,
+                "message_id": message.message_id,
+                "schedule_kind": schedule_kind,
+                "delay_seconds": DELETE_DELAY_SECONDS,
+                "scheduled": scheduled,
+            },
         )
     except Exception:
         logger.exception(

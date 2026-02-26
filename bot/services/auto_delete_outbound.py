@@ -9,6 +9,7 @@ from .protected_groups import get_active_protected_group, is_group_protected
 logger = logging.getLogger(__name__)
 
 GROUP_CHAT_TYPES = {ChatType.GROUP, ChatType.SUPERGROUP}
+DELETE_DELAY_SECONDS = 45
 
 
 async def schedule_sent_message_if_needed(
@@ -34,6 +35,7 @@ async def schedule_sent_message_if_needed(
             bot=message.bot,
             chat_id=message.chat.id,
             message_id=message.message_id,
+            delay_seconds=DELETE_DELAY_SECONDS,
             schedule_kind=kind,
         )
     except Exception:

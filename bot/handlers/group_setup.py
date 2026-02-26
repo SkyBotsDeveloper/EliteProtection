@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from datetime import UTC
 
 from aiogram import F, Router
@@ -33,27 +33,27 @@ def _is_bot_added_event(update: ChatMemberUpdated) -> bool:
 def _delete_permission_status(chat_member_status: str, can_delete_messages: bool | None) -> str:
     if chat_member_status in {"creator", "administrator"}:
         if chat_member_status == "creator":
-            return "Haan ✅"
+            return "Yes"
         if can_delete_messages:
-            return "Haan ✅"
-        return "Nahi ❌"
-    return "Nahi ❌"
+            return "Yes"
+        return "No"
+    return "No"
 
 
 def _invite_permission_status(chat_member_status: str, can_invite_users: bool | None) -> str:
     if chat_member_status in {"creator", "administrator"}:
         if chat_member_status == "creator":
-            return "Haan ✅"
+            return "Yes"
         if can_invite_users:
-            return "Haan ✅"
-        return "Nahi ❌"
-    return "Nahi ❌"
+            return "Yes"
+        return "No"
+    return "No"
 
 
 def _read_messages_status(can_read_all_group_messages: bool | None) -> str:
     if can_read_all_group_messages:
-        return "Full access ✅ (privacy mode off)"
-    return "Limited access ⚠️ (privacy mode on ho sakta hai)"
+        return "Full access (privacy mode off)"
+    return "Limited access (privacy mode may be on)"
 
 
 def _observer_status_text() -> str:
@@ -61,10 +61,10 @@ def _observer_status_text() -> str:
     missing_fields = settings.observer_missing_fields
     if missing_fields:
         joined_missing = ", ".join(missing_fields)
-        return f"Incomplete ⚠️ (missing: {joined_missing})"
+        return f"Incomplete (missing: {joined_missing})"
     if settings.observer_effective_enabled:
-        return "Enabled ✅"
-    return "Disabled ⚠️ (other bot messages visible nahi honge)"
+        return "Enabled"
+    return "Disabled (other bot messages may not be visible)"
 
 
 async def _safe_reply(message: Message, text: str) -> None:
@@ -98,17 +98,31 @@ async def check_group_setup(message: Message) -> None:
         await _safe_reply(message, GENERIC_HANDLER_ERROR_TEXT)
         return
 
-    subscription_text = "Active ✅" if protected_group else "Active nahi ❌"
+    status_value = _status_value(bot_member.status)
+    can_delete = bool(status_value == "creator" or getattr(bot_member, "can_delete_messages", False))
+    can_read_all = bool(getattr(me, "can_read_all_group_messages", False))
+
+    subscription_text = "Active" if protected_group else "Not active"
     delete_perm_text = _delete_permission_status(
-        chat_member_status=_status_value(bot_member.status),
+        chat_member_status=status_value,
         can_delete_messages=getattr(bot_member, "can_delete_messages", None),
     )
     invite_perm_text = _invite_permission_status(
-        chat_member_status=_status_value(bot_member.status),
+        chat_member_status=status_value,
         can_invite_users=getattr(bot_member, "can_invite_users", None),
     )
     read_messages_text = _read_messages_status(getattr(me, "can_read_all_group_messages", None))
     observer_status = _observer_status_text()
+
+    warning_lines: list[str] = []
+    if not can_delete:
+        warning_lines.append("- Missing Delete Messages permission: auto-delete will not work.")
+    if not can_read_all:
+        warning_lines.append("- Privacy/read visibility is limited: some bot messages may not be visible.")
+
+    warnings_block = "\n".join(warning_lines)
+    if warnings_block:
+        warnings_block = f"\n\nCritical warnings:\n{warnings_block}"
 
     await _safe_reply(
         message,
@@ -119,8 +133,8 @@ async def check_group_setup(message: Message) -> None:
             f"3) Add members / Invite users permission: {invite_perm_text}\n"
             f"4) Group messages read access (padhne ki permission): {read_messages_text}\n"
             f"5) Observer status (other-bot capture): {observer_status}\n\n"
-            "Note: Observer auto-invite ke liye Invite users permission dena zaroori hai.\n"
-            "Agar privacy mode on ho to bot sirf limited messages read kar pata hai."
+            "Note: Observer auto-invite ke liye Invite users permission dena zaroori hai."
+            f"{warnings_block}"
         ),
     )
 
@@ -146,7 +160,7 @@ async def group_status(message: Message) -> None:
     await _safe_reply(
         message,
         (
-            "Protection active hai ✅\n"
+            "Protection is active.\n"
             f"Owner User ID: <code>{protected_group.owner_user_id}</code>\n"
             f"Activation Time: {activated_at_text}"
         ),
@@ -184,4 +198,3 @@ async def on_bot_added_to_group(event: ChatMemberUpdated) -> None:
             "Failed to send non-subscribed group notice",
             extra={"chat_id": event.chat.id},
         )
-
