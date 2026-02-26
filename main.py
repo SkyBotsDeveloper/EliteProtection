@@ -43,6 +43,7 @@ def run_webhook_server(settings: Settings) -> None:
         host=settings.web_server_host,
         port=settings.web_server_port,
         log_level=settings.log_level.lower(),
+        workers=1,
         reload=False,
     )
 

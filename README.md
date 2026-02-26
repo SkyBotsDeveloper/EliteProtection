@@ -122,6 +122,7 @@ python main.py
 - Webhook mode:
   - `WEBHOOK_MODE=true` (ye `BOT_RUN_MODE` se upar priority leta hai)
   - `WEBHOOK_BASE_URL` required
+  - Heroku webhook dyno ke liye `WEB_CONCURRENCY=1` rakho
 
 ## Heroku One-Click Deploy (`app.json`)
 Deploy button:
@@ -162,6 +163,7 @@ https://www.heroku.com/deploy?template=https://github.com/SkyBotsDeveloper/Elite
    heroku config:set WEBHOOK_BASE_URL="https://your-app-name.herokuapp.com"
    heroku config:set WEBHOOK_PATH="/webhook/telegram"
    heroku config:set WEBHOOK_SECRET_TOKEN="<long_random_secret>"
+   heroku config:set WEB_CONCURRENCY="1"
    ```
 3. Deploy:
    ```bash

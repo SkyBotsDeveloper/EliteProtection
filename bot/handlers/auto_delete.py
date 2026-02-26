@@ -22,7 +22,8 @@ def _is_forwarded_from_bot(message: Message) -> bool:
         return True
 
     sender_chat = getattr(forward_origin, "sender_chat", None)
-    if sender_chat is not None and str(getattr(sender_chat, "type", "")).lower() == "bot":
+    sender_chat_type = str(getattr(sender_chat, "type", "")).lower()
+    if sender_chat is not None and sender_chat_type in {"bot", "channel"}:
         return True
 
     return False
@@ -30,7 +31,11 @@ def _is_forwarded_from_bot(message: Message) -> bool:
 
 def _is_sender_context_bot(message: Message) -> bool:
     sender_chat = getattr(message, "sender_chat", None)
-    if sender_chat is not None and str(getattr(sender_chat, "type", "")).lower() == "bot":
+    sender_chat_type = str(getattr(sender_chat, "type", "")).lower()
+    if sender_chat is not None and sender_chat_type in {"bot", "channel"}:
+        return True
+
+    if getattr(message, "is_automatic_forward", False):
         return True
 
     sender_business_bot = getattr(message, "sender_business_bot", None)
@@ -42,17 +47,22 @@ def _is_sender_context_bot(message: Message) -> bool:
 
 def _is_reply_to_bot_content(message: Message) -> bool:
     reply_to_message = getattr(message, "reply_to_message", None)
-    if reply_to_message is not None and is_bot_generated_message(reply_to_message):
-        return True
+    if reply_to_message is not None:
+        if is_bot_generated_message(reply_to_message):
+            return True
+        if getattr(reply_to_message, "is_automatic_forward", False):
+            return True
 
     external_reply = getattr(message, "external_reply", None)
     reply_origin = getattr(external_reply, "origin", None)
+
     sender_user = getattr(reply_origin, "sender_user", None)
     if sender_user is not None and getattr(sender_user, "is_bot", False):
         return True
 
     sender_chat = getattr(reply_origin, "sender_chat", None)
-    if sender_chat is not None and str(getattr(sender_chat, "type", "")).lower() == "bot":
+    sender_chat_type = str(getattr(sender_chat, "type", "")).lower()
+    if sender_chat is not None and sender_chat_type in {"bot", "channel"}:
         return True
 
     return False
@@ -75,14 +85,18 @@ def is_bot_generated_message(message: Message) -> bool:
     return False
 
 
-@router.message(F.chat.type.in_(GROUP_CHAT_TYPES))
-async def auto_delete_bot_messages(message: Message) -> None:
-    schedule_kind: str | None = None
+def _pick_schedule_kind(message: Message) -> str | None:
     if message.sticker is not None:
-        schedule_kind = "sticker"
-    elif is_bot_generated_message(message) or _is_reply_to_bot_content(message):
-        schedule_kind = "bot_content"
+        return "sticker"
 
+    if is_bot_generated_message(message) or _is_reply_to_bot_content(message):
+        return "bot_content"
+
+    return None
+
+
+async def _schedule_if_eligible(message: Message) -> None:
+    schedule_kind = _pick_schedule_kind(message)
     if schedule_kind is None:
         return
 
@@ -105,3 +119,13 @@ async def auto_delete_bot_messages(message: Message) -> None:
                 "schedule_kind": schedule_kind,
             },
         )
+
+
+@router.message(F.chat.type.in_(GROUP_CHAT_TYPES))
+async def auto_delete_bot_messages(message: Message) -> None:
+    await _schedule_if_eligible(message)
+
+
+@router.edited_message(F.chat.type.in_(GROUP_CHAT_TYPES))
+async def auto_delete_edited_bot_messages(message: Message) -> None:
+    await _schedule_if_eligible(message)

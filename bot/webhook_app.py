@@ -1,9 +1,10 @@
-﻿import logging
+﻿import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
 from aiogram import Bot, Dispatcher
-from aiogram.exceptions import TelegramAPIError
+from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
 from aiogram.types import Update
 from fastapi import FastAPI, Header, HTTPException, Request
 
@@ -21,6 +22,40 @@ _SETTINGS = get_settings()
 WEBHOOK_PATH = _SETTINGS.normalized_webhook_path
 
 
+async def _set_webhook_with_retry(
+    *,
+    bot: Bot,
+    webhook_url: str,
+    secret_token: str | None,
+    allowed_updates: list[str],
+    max_attempts: int = 5,
+) -> None:
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await bot.set_webhook(
+                url=webhook_url,
+                secret_token=secret_token,
+                allowed_updates=allowed_updates,
+                drop_pending_updates=False,
+            )
+            return
+        except TelegramRetryAfter as exc:
+            retry_after = float(getattr(exc, "retry_after", 1) or 1)
+            retry_after = max(1.0, retry_after)
+            if attempt >= max_attempts:
+                raise
+
+            logger.warning(
+                "SetWebhook rate limited, retrying",
+                extra={
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "retry_after_seconds": retry_after,
+                },
+            )
+            await asyncio.sleep(retry_after)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings: Settings = get_settings()
@@ -34,11 +69,11 @@ async def lifespan(app: FastAPI):
 
     try:
         await startup_infra(settings, bot=runtime.bot)
-        await runtime.bot.set_webhook(
-            url=webhook_url,
+        await _set_webhook_with_retry(
+            bot=runtime.bot,
+            webhook_url=webhook_url,
             secret_token=settings.webhook_secret_token_value,
             allowed_updates=runtime.dispatcher.resolve_used_update_types(),
-            drop_pending_updates=False,
         )
     except Exception:
         logger.exception("Webhook startup failed")
@@ -104,4 +139,3 @@ async def telegram_webhook(
         raise HTTPException(status_code=500, detail="Update processing failed") from None
 
     return {"ok": True}
-

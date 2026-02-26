@@ -118,6 +118,10 @@
     "WEB_SERVER_HOST": {
       "description": "HTTP server bind host",
       "value": "0.0.0.0"
+    },
+    "WEB_CONCURRENCY": {
+      "description": "Uvicorn worker count for webhook dyno (keep 1 for Telegram webhook stability)",
+      "value": "1"
     }
   },
   "scripts": {
