@@ -154,6 +154,20 @@ def _message_has_via_bot(message: Any) -> bool:
     )
 
 
+def _message_has_bot_only_markup(message: Any) -> bool:
+    # Inline/reply markups are bot-origin in Telegram.
+    return getattr(message, "reply_markup", None) is not None
+
+
+def _message_sender_looks_channel_like(message: Any) -> bool:
+    from_id = getattr(message, "from_id", None)
+    if PeerChannel is not None and isinstance(from_id, PeerChannel):
+        return True
+    if bool(getattr(message, "post", False)):
+        return True
+    return False
+
+
 def _forward_origin_is_bot_or_channel(message: Any) -> bool:
     fwd_from = getattr(message, "fwd_from", None)
     if fwd_from is None:
@@ -252,6 +266,10 @@ async def _pick_schedule_kind(event: Any, *, message: Any) -> str | None:
         return "sticker"
 
     if _message_has_via_bot(message):
+        return "bot_content"
+    if _message_has_bot_only_markup(message):
+        return "bot_content"
+    if _message_sender_looks_channel_like(message):
         return "bot_content"
     if _forward_origin_is_bot_or_channel(message):
         return "bot_content"
