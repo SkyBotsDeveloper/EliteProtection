@@ -298,8 +298,9 @@ class AutoDeleteEngine:
                 next_tick_at += self._tick_interval_seconds
                 drift = monotonic() - next_tick_at
                 if drift > self._tick_interval_seconds * 3:
-                    next_tick_at = monotonic() + self._tick_interval_seconds
-                    self._current_slot = self._slot_for_due(next_tick_at)
+                    # Catch up without jumping ring-buffer slots. Jumping slots can
+                    # leave due entries waiting for a full wrap-around.
+                    next_tick_at = monotonic()
             except asyncio.CancelledError:
                 return
             except Exception:

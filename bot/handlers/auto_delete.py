@@ -73,6 +73,22 @@ def _is_reply_to_bot_content(message: Message) -> bool:
     return False
 
 
+def _is_reply_to_sticker(message: Message) -> bool:
+    reply_to_message = getattr(message, "reply_to_message", None)
+    if reply_to_message is not None and getattr(reply_to_message, "sticker", None) is not None:
+        return True
+
+    external_reply = getattr(message, "external_reply", None)
+    if external_reply is None:
+        return False
+
+    if getattr(external_reply, "sticker", None) is not None:
+        return True
+
+    media_type = str(getattr(external_reply, "media_type", "")).lower()
+    return media_type == "sticker"
+
+
 def is_bot_generated_message(message: Message) -> bool:
     from_user = message.from_user
     if from_user is not None and from_user.is_bot:
@@ -94,7 +110,11 @@ def _pick_schedule_kind(message: Message) -> str | None:
     if message.sticker is not None:
         return "sticker"
 
-    if is_bot_generated_message(message) or _is_reply_to_bot_content(message):
+    if (
+        is_bot_generated_message(message)
+        or _is_reply_to_bot_content(message)
+        or _is_reply_to_sticker(message)
+    ):
         return "bot_content"
 
     return None

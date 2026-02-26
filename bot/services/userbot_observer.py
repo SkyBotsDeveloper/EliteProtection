@@ -50,6 +50,7 @@ _observer_user_id: int | None = None
 _bot_user_id: int | None = None
 _joined_groups: set[int] = set()
 _retry_after_by_group: dict[int, float] = {}
+_known_bot_user_ids: set[int] = set()
 
 
 def _status_value(raw_status: object) -> str:
@@ -79,14 +80,142 @@ async def _is_protected_group(chat_id: int) -> bool:
     return (await get_active_protected_group(group_id=chat_id)) is not None
 
 
-async def _sender_is_bot(event: Any) -> bool:
-    sender = getattr(event.message, "sender", None)
-    if sender is None:
-        try:
+def _extract_sender_user_id(message: Any) -> int | None:
+    sender_id = getattr(message, "sender_id", None)
+    if isinstance(sender_id, int):
+        return sender_id
+
+    from_id = getattr(message, "from_id", None)
+    user_id = getattr(from_id, "user_id", None)
+    if isinstance(user_id, int):
+        return user_id
+
+    return None
+
+
+def _sender_object_is_bot(sender: Any) -> bool:
+    return bool(getattr(sender, "bot", False) or getattr(sender, "is_bot", False))
+
+
+def _remember_bot_sender(message: Any, sender: Any) -> None:
+    if not _sender_object_is_bot(sender):
+        return
+
+    sender_id = _extract_sender_user_id(message)
+    if sender_id is None:
+        sender_id = getattr(sender, "id", None)
+
+    if isinstance(sender_id, int):
+        _known_bot_user_ids.add(sender_id)
+
+
+def _message_has_sticker(message: Any) -> bool:
+    if getattr(message, "sticker", None) is not None:
+        return True
+
+    document = getattr(message, "document", None)
+    if document is None:
+        return False
+
+    mime_type = str(getattr(document, "mime_type", "")).lower()
+    if mime_type in {"image/webp", "application/x-tgsticker", "video/webm"}:
+        return True
+
+    attributes = getattr(document, "attributes", None) or []
+    for attribute in attributes:
+        if "sticker" in attribute.__class__.__name__.lower():
+            return True
+
+    return False
+
+
+def _message_has_via_bot(message: Any) -> bool:
+    return (
+        getattr(message, "via_bot_id", None) is not None
+        or getattr(message, "via_business_bot_id", None) is not None
+    )
+
+
+def _forward_origin_is_bot_or_channel(message: Any) -> bool:
+    fwd_from = getattr(message, "fwd_from", None)
+    if fwd_from is None:
+        return False
+
+    from_id = getattr(fwd_from, "from_id", None)
+    if from_id is None:
+        return False
+
+    if PeerChannel is not None and isinstance(from_id, PeerChannel):
+        return True
+
+    user_id = getattr(from_id, "user_id", None)
+    return isinstance(user_id, int) and user_id in _known_bot_user_ids
+
+
+async def _sender_is_bot(event: Any, *, source_message: Any | None = None) -> bool:
+    message = source_message if source_message is not None else getattr(event, "message", None)
+    if message is None:
+        return False
+
+    sender_id = _extract_sender_user_id(message)
+    if sender_id is not None and sender_id in _known_bot_user_ids:
+        return True
+
+    sender = getattr(message, "sender", None)
+    if _sender_object_is_bot(sender):
+        _remember_bot_sender(message, sender)
+        return True
+
+    try:
+        if source_message is None:
             sender = await event.get_sender()
-        except Exception:
-            return False
-    return bool(getattr(sender, "bot", False))
+        else:
+            get_sender = getattr(message, "get_sender", None)
+            sender = await get_sender() if callable(get_sender) else None
+    except Exception:
+        sender = None
+
+    if not _sender_object_is_bot(sender):
+        return False
+
+    _remember_bot_sender(message, sender)
+    return True
+
+
+async def _is_reply_to_bot_or_sticker(event: Any, message: Any) -> bool:
+    if not bool(getattr(message, "is_reply", False)):
+        return False
+
+    try:
+        reply_message = await event.get_reply_message()
+    except Exception:
+        return False
+
+    if reply_message is None:
+        return False
+    if _message_has_sticker(reply_message):
+        return True
+    if _message_has_via_bot(reply_message):
+        return True
+    if _forward_origin_is_bot_or_channel(reply_message):
+        return True
+    return await _sender_is_bot(event, source_message=reply_message)
+
+
+async def _pick_schedule_kind(event: Any, *, message: Any) -> str | None:
+    if _message_has_sticker(message):
+        return "sticker"
+
+    if _message_has_via_bot(message):
+        return "bot_content"
+    if _forward_origin_is_bot_or_channel(message):
+        return "bot_content"
+    if await _sender_is_bot(event, source_message=message):
+        return "bot_content"
+    if await _is_reply_to_bot_or_sticker(event, message):
+        return "bot_content"
+
+    return None
 
 
 async def _bot_can_invite_members(*, chat_id: int) -> bool:
@@ -246,20 +375,16 @@ async def _on_new_message(event: Any) -> None:
     if chat_id is None or chat_id >= 0:
         return
 
-    schedule_kind: str | None = None
-    if getattr(message, "sticker", None) is not None:
-        schedule_kind = "sticker"
-    else:
-        via_bot_id = getattr(message, "via_bot_id", None)
-        if via_bot_id is not None or await _sender_is_bot(event):
-            schedule_kind = "bot_content"
-
+    schedule_kind = await _pick_schedule_kind(event, message=message)
     if schedule_kind is None:
         return
 
     try:
         if not await _is_protected_group(chat_id):
             return
+
+        _joined_groups.add(chat_id)
+        _retry_after_by_group.pop(chat_id, None)
 
         await get_auto_delete_service().schedule_message_delete(
             bot=bot,
@@ -281,10 +406,19 @@ async def _on_new_message(event: Any) -> None:
 async def start_userbot_observer(*, settings: Settings, bot: Bot) -> None:
     global _observer_client, _observer_bot, _sync_task, _observer_user_id, _bot_user_id
 
+    active_groups_count = 0
+    try:
+        active_groups_count = len(await list_active_group_ids(limit=10000))
+    except Exception:
+        logger.exception("Failed to load active group count before observer startup")
+
     if not settings.observer_effective_enabled:
         logger.warning(
             "Userbot observer disabled; other-bot messages are not visible without observer credentials",
-            extra={"observer_enabled": settings.observer_enabled},
+            extra={
+                "observer_enabled": settings.observer_enabled,
+                "active_groups_count": active_groups_count,
+            },
         )
         return
 
@@ -296,7 +430,10 @@ async def start_userbot_observer(*, settings: Settings, bot: Bot) -> None:
     if missing_fields:
         logger.warning(
             "Userbot observer not started: missing required observer credentials",
-            extra={"missing_fields": ",".join(missing_fields)},
+            extra={
+                "missing_fields": ",".join(missing_fields),
+                "active_groups_count": active_groups_count,
+            },
         )
         return
 
@@ -330,6 +467,7 @@ async def start_userbot_observer(*, settings: Settings, bot: Bot) -> None:
             return
 
         client.add_event_handler(_on_new_message, events.NewMessage(incoming=True))
+        client.add_event_handler(_on_new_message, events.MessageEdited(incoming=True))
 
         _observer_client = client
         observer_user = await client.get_me()
@@ -361,6 +499,7 @@ async def stop_userbot_observer() -> None:
         _observer_user_id = None
         _joined_groups.clear()
         _retry_after_by_group.clear()
+        _known_bot_user_ids.clear()
 
     if sync_task is not None:
         sync_task.cancel()
