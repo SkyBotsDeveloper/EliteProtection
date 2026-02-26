@@ -40,6 +40,24 @@ def _is_sender_context_bot(message: Message) -> bool:
     return False
 
 
+def _is_reply_to_bot_content(message: Message) -> bool:
+    reply_to_message = getattr(message, "reply_to_message", None)
+    if reply_to_message is not None and is_bot_generated_message(reply_to_message):
+        return True
+
+    external_reply = getattr(message, "external_reply", None)
+    reply_origin = getattr(external_reply, "origin", None)
+    sender_user = getattr(reply_origin, "sender_user", None)
+    if sender_user is not None and getattr(sender_user, "is_bot", False):
+        return True
+
+    sender_chat = getattr(reply_origin, "sender_chat", None)
+    if sender_chat is not None and str(getattr(sender_chat, "type", "")).lower() == "bot":
+        return True
+
+    return False
+
+
 def is_bot_generated_message(message: Message) -> bool:
     from_user = message.from_user
     if from_user is not None and from_user.is_bot:
@@ -62,7 +80,7 @@ async def auto_delete_bot_messages(message: Message) -> None:
     schedule_kind: str | None = None
     if message.sticker is not None:
         schedule_kind = "sticker"
-    elif is_bot_generated_message(message):
+    elif is_bot_generated_message(message) or _is_reply_to_bot_content(message):
         schedule_kind = "bot_content"
 
     if schedule_kind is None:
